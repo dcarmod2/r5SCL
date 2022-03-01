@@ -243,7 +243,8 @@ public class OSM implements OSMEntitySource, OSMEntitySink {
 
     public void readPbf(InputStream inputStream) {
         try {
-            OSMEntitySource source = new PBFInput(inputStream);
+            LOG.info("readPbf()");
+            OSMEntitySource source = new PBFInput(inputStream);       
             source.copyTo(this);
         } catch (IOException ex) {
             LOG.error("Error occurred while parsing VEX stream.");
@@ -259,6 +260,7 @@ public class OSM implements OSMEntitySource, OSMEntitySink {
 
     /** Write the contents of this OSM MapDB out to a stream in PBF binary format. */
     public void writePbf(OutputStream outputStream) throws IOException {
+        LOG.info("writePbf()");
         OSMEntitySink sink = new PBFOutput(outputStream);
         this.copyTo(sink);
     }

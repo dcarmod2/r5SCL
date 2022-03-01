@@ -1,5 +1,8 @@
 package com.conveyal.analysis.controllers;
 
+import org.openstreetmap.osmosis.core.Osmosis;
+import com.conveyal.analysis.models.Region;
+
 import com.conveyal.analysis.AnalysisServerException;
 import com.conveyal.analysis.components.Components;
 import com.conveyal.analysis.components.TaskScheduler;
@@ -29,6 +32,7 @@ import spark.Response;
 import spark.Service;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -149,13 +153,29 @@ public class BundleController implements HttpController {
                     bundle.status = Bundle.Status.PROCESSING_OSM;
                     bundle.osmId = new ObjectId().toString();
                     Persistence.bundles.modifiyWithoutUpdatingLock(bundle);
-
+                    
+                    // Crop the OSM file to the region
                     DiskFileItem fi = (DiskFileItem) files.get("osm").get(0);
+                    final Region region = Persistence.regions.findByIdIfPermitted(bundle.regionId, bundle.accessGroup);
+                    Osmosis.run(
+                        new String[] {
+                            "--read-pbf", fi.getStoreLocation().getAbsolutePath(),
+                            "--bounding-box", "left=" + region.bounds.west, "bottom=" + region.bounds.south, "right=" + region.bounds.east, "top=" + region.bounds.north, 
+                            "--tf", "accept-ways", "highway=*", "public_transport=platform", "railway=platform", "park_ride=*", 
+                            "--tf", "accept-relations", "type=restriction", 
+                            "--used-node", 
+                            "--write-pbf", "nottemp.pbf"
+                        }
+                    ); 
+                    
                     OSM osm = new OSM(null);
                     osm.intersectionDetection = true;
-                    osm.readPbf(fi.getInputStream());
 
-                    fileStorage.moveIntoStorage(osmCache.getKey(bundle.osmId), fi.getStoreLocation());
+                    // TODO: alternative is output stream
+                    osm.readPbf(new FileInputStream("nottemp.pbf"));
+                    // osm.readPbf(fi.getInputStream());
+                    fileStorage.moveIntoStorage(osmCache.getKey(bundle.osmId), new File("nottemp.pbf"));
+                    // fileStorage.moveIntoStorage(osmCache.getKey(bundle.osmId), fi.getStoreLocation());
                 }
 
                 if (bundle.feedGroupId == null) {

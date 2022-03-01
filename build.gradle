@@ -251,6 +251,13 @@ dependencies {
     // Chart drawing library for examining travel time distributions when crafting tests.
     // Although rarely used it should be low-impact: it is a test-only dependency with no transitive dependenices.
     testImplementation('org.jfree:jfreechart:1.5.1')
+    
+    //// Osmosis Dependencies ////
+    implementation group: 'org.openstreetmap.osmosis', name: 'osmosis-areafilter', version: '0.48.3'
+    implementation group: 'org.openstreetmap.osmosis', name: 'osmosis-core', version: '0.48.3'
+    implementation group: 'org.openstreetmap.osmosis', name: 'osmosis-osm-binary', version: '0.48.3'
+    implementation group: 'org.openstreetmap.osmosis', name: 'osmosis-pbf', version: '0.48.3'
+    implementation group: 'org.openstreetmap.osmosis', name: 'osmosis-tagfilter', version: '0.48.3'
 
 }
 

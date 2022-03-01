@@ -236,9 +236,9 @@ public class GTFSFeed implements Cloneable, Closeable {
         new Trip.Loader(this).loadTable(zip);
         new Frequency.Loader(this).loadTable(zip);
         new StopTime.Loader(this).loadTable(zip);
-        LOG.info("{} errors", errors.size());
+        // LOG.info("{} errors", errors.size());
         for (GTFSError error : errors) {
-            LOG.info("{}", error);
+            // LOG.info("{}", error);
         }
 
         zip.close();
