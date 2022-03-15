@@ -199,6 +199,7 @@ public class TravelTimeReducer {
     public void extractTravelTimePercentilesAndRecord (int target, int[] timesSeconds) {
         checkArgument(timesSeconds.length == timesPerDestination,
             "Number of times supplied must match the number of iterations in this search.");
+        LOG.info("TRAVEL TIMES: {}", timesSeconds);
         for (int i : timesSeconds) {
             checkArgument(i >= 0, "Travel times must be positive.");
         }

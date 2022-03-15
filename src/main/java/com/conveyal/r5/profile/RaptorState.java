@@ -5,6 +5,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Arrays;
 import java.util.BitSet;
+import java.lang.Math;
 
 import static com.conveyal.r5.common.Util.newIntArray;
 import static com.conveyal.r5.profile.FastRaptorWorker.ENABLE_OPTIMIZATION_CLEAR_LONG_PATHS;
@@ -222,6 +223,30 @@ public class RaptorState {
         }
     }
 
+    public void maxMergePrevious () {
+        LOG.info("maxMergePrevious()");
+        checkNotNull(previous, "Merge may only be called on a state with a previous round.");
+        checkArgument(previous.departureTime == this.departureTime,
+                "Previous round should always have the same departure minute.");
+        int nStops = this.bestTimes.length;
+        for (int stop = 0; stop < nStops; stop++) {
+            // When breaking a tie, prefer times from the previous round with fewer transfers.
+            if (previous.bestTimes[stop] >= this.bestTimes[stop]) {
+                this.bestTimes[stop] = previous.bestTimes[stop];
+                this.transferStop[stop] = previous.transferStop[stop];
+            }
+            if (previous.bestNonTransferTimes[stop] >= this.bestNonTransferTimes[stop]) {
+                this.bestNonTransferTimes[stop] = previous.bestNonTransferTimes[stop];
+                this.previousPatterns[stop] = previous.previousPatterns[stop];
+                this.previousStop[stop] = previous.previousStop[stop];
+                this.nonTransferInVehicleTravelTime[stop] = previous.nonTransferInVehicleTravelTime[stop];
+                this.previousWaitTime[stop] = previous.previousWaitTime[stop];
+                this.previousInVehicleTravelTime[stop] = previous.previousInVehicleTravelTime[stop];
+                this.nonTransferWaitTime[stop] = previous.nonTransferWaitTime[stop];
+            }
+        }
+    }
+
     /**
      * Check a time against the best known times at a transit stop, and record the new time if it is optimal.
      * This same method is used to handle both transit arrivals and transfers, according to the transfer parameter.
@@ -254,9 +279,13 @@ public class RaptorState {
             int previousAlightingStop = previous.transferStop[fromStop] == -1 ? fromStop : previous.transferStop[fromStop];
             int totalWaitTime = previous.nonTransferWaitTime[previousAlightingStop] + waitTime;
             int totalInVehicleTime = previous.nonTransferInVehicleTravelTime[previousAlightingStop] + inVehicleTime;
+            // LOG.info("Total Wait Time = {} + {}", previous.nonTransferWaitTime[previousAlightingStop], totalWaitTime);
+            // LOG.info("Total Vehicle Time = {} + {}", previous.nonTransferInVehicleTravelTime[previousAlightingStop], inVehicleTime);
             nonTransferWaitTime[stop] = totalWaitTime;
             nonTransferInVehicleTravelTime[stop] = totalInVehicleTime;
-            checkState(totalInVehicleTime + totalWaitTime <= (time - departureTime),
+
+            // LOG.info("{} + {} <= abs({} - {})", totalInVehicleTime, totalWaitTime, time ,departureTime);
+            checkState(totalInVehicleTime + totalWaitTime <= Math.abs(time - departureTime),
                     "Components of travel time are greater than total travel time.");
             optimal = true;
             previousWaitTime[stop] = waitTime;

@@ -14,6 +14,7 @@ import com.conveyal.r5.analyst.PersistenceBuffer;
 import com.conveyal.r5.analyst.PointSetCache;
 import com.conveyal.r5.analyst.S3FilePersistence;
 import com.conveyal.r5.analyst.TravelTimeComputer;
+import com.conveyal.r5.analyst.TravelTimeComputerInward;
 import com.conveyal.r5.analyst.error.ScenarioApplicationException;
 import com.conveyal.r5.analyst.error.TaskError;
 import com.conveyal.r5.common.JsonUtilities;
@@ -450,7 +451,7 @@ public class AnalysisWorker implements Runnable {
         adjustShutdownClock(SINGLE_KEEPALIVE_MINUTES);
 
         // Perform the core travel time computations.
-        TravelTimeComputer computer = new TravelTimeComputer(task, transportNetwork);
+        TravelTimeComputerInward computer = new TravelTimeComputerInward(task, transportNetwork);
         OneOriginResult oneOriginResult = computer.computeTravelTimes();
         return oneOriginResult;
     }
@@ -567,7 +568,7 @@ public class AnalysisWorker implements Runnable {
             adjustShutdownClock(REGIONAL_KEEPALIVE_MINUTES);
 
             // Perform the core travel time and accessibility computations.
-            TravelTimeComputer computer = new TravelTimeComputer(task, transportNetwork);
+            TravelTimeComputerInward computer = new TravelTimeComputerInward(task, transportNetwork);
             OneOriginResult oneOriginResult = computer.computeTravelTimes();
 
             if (task.makeTauiSite) {

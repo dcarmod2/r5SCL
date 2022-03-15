@@ -11,6 +11,7 @@ import com.conveyal.r5.point_to_point.builder.PointToPointQuery;
 import com.conveyal.r5.profile.DominatingList;
 import com.conveyal.r5.profile.FareDominatingList;
 import com.conveyal.r5.profile.FastRaptorWorker;
+import com.conveyal.r5.profile.FastRaptorWorkerInward;
 import com.conveyal.r5.profile.McRaptorSuboptimalPathProfileRouter;
 import com.conveyal.r5.profile.PerTargetPropagater;
 import com.conveyal.r5.profile.StreetMode;
@@ -42,14 +43,14 @@ import static com.conveyal.r5.profile.PerTargetPropagater.MM_PER_METER;
  * TODO: we should merge these grid formats and update the spec to allow JSON errors at the end.
  * TODO: try to decouple the internal representation of the results from how they're serialized to the API.
  */
-public class TravelTimeComputer {
+public class TravelTimeComputerInward {
 
     private static final Logger LOG = LoggerFactory.getLogger(TravelTimeComputer.class);
     private final AnalysisWorkerTask request;
     private final TransportNetwork network;
 
     /** Constructor. */
-    public TravelTimeComputer (AnalysisWorkerTask request, TransportNetwork network) {
+    public TravelTimeComputerInward (AnalysisWorkerTask request, TransportNetwork network) {
         this.request = request;
         this.network = network;
     }
@@ -155,7 +156,7 @@ public class TravelTimeComputer {
             if (request.hasTransit()) {
                 sr.timeLimitSeconds = request.getMaxTimeSeconds(accessMode);
             } else {
-                sr.timeLimitSeconds = request.maxTripDurationMinutes * FastRaptorWorker.SECONDS_PER_MINUTE;
+                sr.timeLimitSeconds = request.maxTripDurationMinutes * FastRaptorWorkerInward.SECONDS_PER_MINUTE;
             }
             // Even if generalized cost tags were present on the input data, we always minimize travel time.
             // The generalized cost calculations currently increment time and weight by the same amount.
@@ -179,9 +180,9 @@ public class TravelTimeComputer {
                     if (accessService.stopsReachable != null) {
                         travelTimesToStopsSeconds.retainEntries((k, v) -> accessService.stopsReachable.contains(k));
                     }
-                    travelTimesToStopsSeconds.transformValues(i -> i + accessService.waitTimeSeconds);
+                    travelTimesToStopsSeconds.transformValues(i -> i - accessService.waitTimeSeconds);
                 }
-               bestAccessOptions.update(travelTimesToStopsSeconds, accessMode);
+               bestAccessOptions.updateInward(travelTimesToStopsSeconds, accessMode);
             }
 
             // Calculate times to reach destinations directly by this street mode, without using transit.
@@ -282,9 +283,9 @@ public class TravelTimeComputer {
         // Transit stops were reached. Perform transit routing from those stops to all other reachable stops. The result
         // is a travel time in seconds for each iteration (departure time x monte carlo draw), for each transit stop.
         int[][] transitTravelTimesToStops;
-        FastRaptorWorker worker = null;
+        FastRaptorWorkerInward worker = null;
         if (request.inRoutingFareCalculator == null) {
-            worker = new FastRaptorWorker(network.transitLayer, request, bestAccessOptions.getTimes());
+            worker = new FastRaptorWorkerInward(network.transitLayer, request, bestAccessOptions.getTimes());
             if (request.includePathResults || request.makeTauiSite) {
                 // By default, this is false and intermediate results (e.g. paths) are discarded.
                 // TODO do we really need to save all states just to get the travel time breakdown?

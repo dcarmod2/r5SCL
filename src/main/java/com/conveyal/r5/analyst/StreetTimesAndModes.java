@@ -71,4 +71,13 @@ public class StreetTimesAndModes {
         });
     }
 
+    void updateInward(TIntIntMap times, StreetMode streetMode) {
+        times.forEachEntry((stop, time) -> {
+            if (!streetTimesAndModes.containsKey(stop) || time > streetTimesAndModes.get(stop).time) {
+                streetTimesAndModes.put(stop, new StreetTimeAndMode(time, streetMode));
+            }
+            return true;
+        });
+    }
+
 }
