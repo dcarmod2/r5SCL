@@ -66,7 +66,7 @@ public class RemoveStops extends Modification {
 
     @Override
     public boolean resolve (TransportNetwork network) {
-        checkIds(routes, patterns, null, false, network);
+        // checkIds(routes, patterns, null, false, network);
         intStops = new TIntHashSet();
         if (stops == null || stops.isEmpty()) {
             errors.add("You must supply some stops to remove.");

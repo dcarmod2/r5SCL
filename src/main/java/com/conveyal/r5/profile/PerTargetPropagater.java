@@ -20,11 +20,25 @@ import gnu.trove.map.TIntIntMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
+import gnu.trove.list.TIntList;
+import gnu.trove.map.TIntIntMap;
+import gnu.trove.map.hash.TIntIntHashMap;
+import gnu.trove.iterator.TIntIterator;
+import com.conveyal.r5.transit.TransitLayer;
+import com.conveyal.r5.transit.TripPattern;
+import com.conveyal.r5.transit.TripSchedule;
+import com.conveyal.r5.transit.path.PatternSequence;
+
+import java.util.*;
+// import java.util.ArrayList;
+// import java.util.Arrays;
+// import java.util.EnumSet;
+// import java.util.List;
+// import java.util.Set;
+// import java.util.Map;
+// import java.util.AbstractMap;
+// import java.util.HashSet;
+// import java.util.PriorityQueue;
 
 /**
  * Given minimum travel times from a single origin point to all transit stops, this class finds minimum travel times to
@@ -89,6 +103,9 @@ public class PerTargetPropagater {
      */
     public List<Path[]> pathsToStopsForIteration = null;
 
+    /** For popular stop removal */
+    public List<String> removePopularStops = new ArrayList();
+
     /**
      * Different options for retaining and reporting paths. In default analyses, paths are not retained.
      * For Taui sites, workers write directly to file storage.
@@ -133,10 +150,13 @@ public class PerTargetPropagater {
      */
     private Path[] perIterationPaths;
 
+    private TIntIntMap stopCounts;
+
     private StreetTimesAndModes.StreetTimeAndMode[] perIterationEgress;
 
     private final PropagationTimer timer = new PropagationTimer();
 
+    private final TransitLayer transit;
     /**
      * Constructor.
      */
@@ -146,7 +166,8 @@ public class PerTargetPropagater {
             EnumSet<StreetMode> modes,
             AnalysisWorkerTask task,
             int[][] travelTimesToStopsForIteration,
-            int[] nonTransitTravelTimesToTargets
+            int[] nonTransitTravelTimesToTargets,
+            TransitLayer transit
     ) {
         this.targets = targets;
         this.modes = modes;
@@ -154,6 +175,7 @@ public class PerTargetPropagater {
         this.travelTimesToStopsForIteration = travelTimesToStopsForIteration;
         this.nonTransitTravelTimesToTargets = nonTransitTravelTimesToTargets;
         this.oneToOne = request instanceof RegionalTask && ((RegionalTask) request).oneToOne;
+        this.transit = transit;
 
         // If we're making a static site we'll break travel times down into components and make paths.
         // This expects the pathsToStopsForIteration and pathWriter fields to be set separately by the caller.
@@ -232,6 +254,8 @@ public class PerTargetPropagater {
             endTarget = startTarget + 1;
         }
 
+        stopCounts = new TIntIntHashMap();
+
         for (int targetIdx = startTarget; targetIdx < endTarget; targetIdx++) {
 
             // Initialize the travel times to that achieved without transit (if any).
@@ -270,6 +294,22 @@ public class PerTargetPropagater {
                         perIterationEgress);
             }
 
+            // for (int i = 0; i < perIterationPaths.length; i++) {
+            //     Path path = perIterationPaths[i];
+            //     if (path != null) {
+            //         PatternSequence patternSequence = new PatternSequence(path.patternSequence, perIterationEgress[i]);
+            //         for (int j = 0; j < patternSequence.patterns.size(); j++){
+            //             TripPattern pattern = this.transit.tripPatterns.get(patternSequence.patterns.get(j));
+            //             for (int k = 0; k < pattern.stops.length; k++){
+            //                 stopCounts.adjustOrPutValue(pattern.stops[k], 1, 1);
+            //             }
+            //         }
+            //     }
+            // }
+
+            // perIterationPaths = null;
+            // perIterationEgress = null;
+
             // Extract the requested percentiles and save them (and/or the resulting accessibility indicator values)
             int targetToWrite = oneToOne ? 0 : targetIdx;
             timer.reducer.start();
@@ -288,6 +328,43 @@ public class PerTargetPropagater {
         }
         timer.fullPropagation.stop();
         timer.log();
+        int maxVal = 0;
+        int maxStop = 0;
+        for (int key: stopCounts.keys()) {
+            if (stopCounts.get(key) > maxVal) {
+                maxStop = key;
+                maxVal = stopCounts.get(key);
+            }
+        }
+        LOG.info("MAX: {}, {} aka {}", maxStop, maxVal, this.transit.stopIdForIndex.get(maxStop)); 
+        findStopInfo(maxStop);
+
+        // TODO: find nearby stops by proximity
+        PriorityQueue<Map.Entry<Integer, Double>> indicies = new PriorityQueue(new Comparator() {
+            public int compare(Object a, Object b) {
+                Map.Entry<Integer, Double> x = (Map.Entry<Integer, Double>)a;
+                Map.Entry<Integer, Double> y = (Map.Entry<Integer, Double>)b;
+
+                return x.getValue() - y.getValue() > 0 ? 1 : -1;
+            }
+        });
+        double lat = this.transit.stopLat.get(maxStop);
+        double lon = this.transit.stopLon.get(maxStop);
+        for (int i = 0; i < this.transit.stopLat.size(); i++) {
+            if (maxStop != i) {
+                double distance = (lat - this.transit.stopLat.get(i)) * (lat - this.transit.stopLat.get(i)) + (lon - this.transit.stopLon.get(i)) * (lon - this.transit.stopLon.get(i));
+                indicies.add(new AbstractMap.SimpleEntry(i, distance));
+            }
+        }
+
+        // LOG.info(Arrays.toString(this.transit.patternsForStop.toArray()));
+        // this.transit.rebuildTransientIndexes();
+
+        for (Iterator<Map.Entry<Integer, Double>> iterator = indicies.iterator(); iterator.hasNext() && removePopularStops.size() < 3;) {
+            Map.Entry<Integer, Double> thing = iterator.next();
+            findStopInfo(thing.getKey());
+        }
+
         if (savePaths == SavePaths.WRITE_TAUI && pathWriter != null) {
             pathWriter.finishAndStorePaths();
         }
@@ -415,8 +492,15 @@ public class PerTargetPropagater {
                             if (pathsToStopsForIteration != null) {
                                 Path path = pathsToStopsForIteration.get(iteration)[stop];
                                 if (path != null) {
-                                    perIterationPaths[iteration] = path;
-                                    perIterationEgress[iteration] = egress;
+                                    PatternSequence patternSequence = new PatternSequence(path.patternSequence, egress);
+                                    for (int j = 0; j < patternSequence.patterns.size(); j++){
+                                        TripPattern pattern = this.transit.tripPatterns.get(patternSequence.patterns.get(j));
+                                        for (int k = 0; k < pattern.stops.length; k++){
+                                            stopCounts.adjustOrPutValue(pattern.stops[k], 1, 1);
+                                        }
+                                    }
+                                    // perIterationPaths[iteration] = path;
+                                    // perIterationEgress[iteration] = egress;
                                 }
                             }
                         }
@@ -427,5 +511,42 @@ public class PerTargetPropagater {
         }
     }
 
+    private void findStopInfo (int stopIndex) {
+        Set<String> tripIds = new HashSet();
+        Set<String> routeIds = new HashSet();
+        String[] stopArr = this.transit.stopIdForIndex.get(stopIndex).split(":");
+        // find all of the routes that contain this stop
+        TIntList patternIndices = this.transit.patternsForStop.get(stopIndex);
+        for (TIntIterator iterator = patternIndices.iterator(); iterator.hasNext();) {
+            int patternIndex = iterator.next();
+            TripPattern tripPattern = this.transit.tripPatterns.get(patternIndex);
+            String[] routeArr = tripPattern.routeId.split(":");
+            routeIds.add("\""+routeArr[1]+"\"");
+            for (TripSchedule tripSchedule : tripPattern.tripSchedules){
+                String[] arr = tripSchedule.tripId.split(":");
+                tripIds.add("\""+arr[1]+"\"");
+            }
+        }
+        // for (TripPattern tripPattern: this.transit.tripPatterns){
+        //     boolean contains = false;
+        //     for (int x : tripPattern.stops) {
+        //         if (x == stopIndex){
+        //             contains = true;
+        //             break;
+        //         }
+        //     }
+
+        //     if (contains){
+        //         String[] routeArr = tripPattern.routeId.split(":");
+        //         routeIds.add("\""+routeArr[1]+"\"");
+        //         // for (TripSchedule tripSchedule : tripPattern.tripSchedules){
+        //         //     String[] arr = tripSchedule.tripId.split(":");
+        //         //     tripIds.add("\""+arr[1]+"\"");
+        //         // }
+        //     }
+        // }
+        String stopToRemove = "{\"name\": \""+stopIndex+"\",\"variants\": [true],\"description\": null,\"feed\": \"6268931e675f576555c61355\",\"routes\": "+Arrays.toString(routeIds.toArray())+",\"trips\": "+Arrays.toString(tripIds.toArray())+",\"stops\": [\""+stopArr[1]+"\"],\"secondsSavedAtEachStop\": 0}";
+        if (routeIds.size() > 0) removePopularStops.add(stopToRemove);
+    }
 
 }

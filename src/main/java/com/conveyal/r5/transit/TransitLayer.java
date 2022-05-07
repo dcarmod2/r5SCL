@@ -120,6 +120,10 @@ public class TransitLayer implements Serializable, Cloneable {
     /** The names of the stops */
     public List<String> stopNames = new ArrayList<>();
 
+    public List<Double> stopLon = new ArrayList<>();
+
+    public List<Double> stopLat = new ArrayList<>();
+
     public List<TIntList> patternsForStop;
 
     public List<Service> services = new ArrayList<>();
@@ -210,6 +214,8 @@ public class TransitLayer implements Serializable, Cloneable {
             fareZoneForStop.add(stop.zone_id);
             parentStationIdForStop.add(stop.parent_station);
             stopForIndex.add(stop);
+            stopLat.add(stop.stop_lat);
+            stopLon.add(stop.stop_lon);
             if (stop.wheelchair_boarding != null && stop.wheelchair_boarding.trim().equals("1")) {
                 stopsWheelchair.set(stopIndex);
             }

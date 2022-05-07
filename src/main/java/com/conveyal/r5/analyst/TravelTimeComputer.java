@@ -1,6 +1,7 @@
 package com.conveyal.r5.analyst;
 
 import com.conveyal.r5.OneOriginResult;
+import com.conveyal.r5.OneOriginResultWithStops;
 import com.conveyal.r5.analyst.cluster.AnalysisWorkerTask;
 import com.conveyal.r5.analyst.cluster.PathWriter;
 import com.conveyal.r5.analyst.cluster.RegionalTask;
@@ -27,6 +28,7 @@ import org.slf4j.LoggerFactory;
 import java.util.EnumSet;
 import java.util.function.IntFunction;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
 
 import static com.conveyal.r5.analyst.scenario.PickupWaitTimes.NO_SERVICE_HERE;
 import static com.conveyal.r5.analyst.scenario.PickupWaitTimes.NO_WAIT_ALL_STOPS;
@@ -58,7 +60,7 @@ public class TravelTimeComputer {
      * The TravelTimeComputer can make travel time grids, accessibility indicators, or (eventually) both depending
      * on what's in the task it's given. TODO factor out each major step of this process into private methods.
      */
-    public OneOriginResult computeTravelTimes() {
+    public OneOriginResultWithStops computeTravelTimes() {
 
         // 0. Preliminary range checking and setup =====================================================================
         if (!request.directModes.equals(request.accessModes)) {
@@ -261,7 +263,7 @@ public class TravelTimeComputer {
             // The origin point was not even linked to the street network.
             // Calling finish() before streaming in any travel times to destinations is designed to produce the right result.
             LOG.info("Origin point was outside the street network. Skipping routing and propagation, and returning default result.");
-            return travelTimeReducer.finish();
+            return new OneOriginResultWithStops(travelTimeReducer.finish(), new ArrayList());
         }
 
         // Short circuit unnecessary transit routing: If the origin was linked to a road, but no transit stations
@@ -275,7 +277,7 @@ public class TravelTimeComputer {
                 final int travelTimeSeconds = nonTransitTravelTimesToDestinations.getTravelTimeToPoint(target);
                 travelTimeReducer.recordUnvaryingTravelTimeAtTarget(target, travelTimeSeconds);
             }
-            return travelTimeReducer.finish();
+            return new OneOriginResultWithStops(travelTimeReducer.finish(), new ArrayList());
         }
 
         // II. Transit Routing ========================================================================================
@@ -320,7 +322,8 @@ public class TravelTimeComputer {
                 egressStreetModes,
                 request,
                 transitTravelTimesToStops,
-                nonTransitTravelTimesToDestinations.travelTimes
+                nonTransitTravelTimesToDestinations.travelTimes,
+                network.transitLayer
         );
 
         // We cannot yet merge the functionality of the TravelTimeReducer into the PerTargetPropagator
@@ -345,7 +348,8 @@ public class TravelTimeComputer {
             }
         }
 
-        return perTargetPropagater.propagate();
+        OneOriginResult res = perTargetPropagater.propagate();
+        return new OneOriginResultWithStops(res, perTargetPropagater.removePopularStops);
 
     }
 

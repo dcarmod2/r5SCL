@@ -7,6 +7,7 @@ import com.conveyal.file.LocalFileStorage;
 import com.conveyal.file.S3FileStorage;
 import com.conveyal.gtfs.GTFSCache;
 import com.conveyal.r5.OneOriginResult;
+import com.conveyal.r5.OneOriginResultWithStops;
 import com.conveyal.r5.analyst.AccessibilityResult;
 import com.conveyal.r5.analyst.FilePersistence;
 import com.conveyal.r5.analyst.NetworkPreloader;
@@ -424,8 +425,8 @@ public class AnalysisWorker implements Runnable {
         // TODO allow for a list of multiple already loaded TransitNetworks.
         networkId = task.graphId;
         TransportNetwork transportNetwork = networkLoaderState.value;
-        OneOriginResult oneOriginResult = handleOneSinglePointTask(task, transportNetwork);
-        return singlePointResultToBinary(oneOriginResult, task, transportNetwork);
+        OneOriginResultWithStops oneOriginResult = handleOneSinglePointTask(task, transportNetwork);
+        return singlePointResultToBinary(oneOriginResult.res, task, transportNetwork, oneOriginResult.popularStops);
     }
 
     /**
@@ -433,7 +434,7 @@ public class AnalysisWorker implements Runnable {
      * @return the travel time grid (binary data) which will be passed back to the client UI, with a JSON block at the
      *         end containing accessibility figures, scenario application warnings, and informational messages.
      */
-    protected OneOriginResult handleOneSinglePointTask (TravelTimeSurfaceTask task, TransportNetwork transportNetwork) {
+    protected OneOriginResultWithStops handleOneSinglePointTask (TravelTimeSurfaceTask task, TransportNetwork transportNetwork) {
 
         // The presence of destination point set keys indicates that we should calculate single-point accessibility.
         // Every task should include a decay function (set to step function by backend if not supplied by user).
@@ -451,14 +452,15 @@ public class AnalysisWorker implements Runnable {
 
         // Perform the core travel time computations.
         TravelTimeComputer computer = new TravelTimeComputer(task, transportNetwork);
-        OneOriginResult oneOriginResult = computer.computeTravelTimes();
+        OneOriginResultWithStops oneOriginResult = computer.computeTravelTimes();
         return oneOriginResult;
     }
 
     private byte[] singlePointResultToBinary (
             OneOriginResult oneOriginResult,
             TravelTimeSurfaceTask task,
-            TransportNetwork transportNetwork
+            TransportNetwork transportNetwork,
+            List<String> popularStops
     ) throws IOException {
         // Prepare a binary travel time grid which will be sent back to the client via the backend (broker). Data are
         // gzipped before sending back to the broker. Compression ratios here are extreme (100x is not uncommon).
@@ -481,7 +483,8 @@ public class AnalysisWorker implements Runnable {
                     oneOriginResult.accessibility,
                     transportNetwork.scenarioApplicationWarnings,
                     transportNetwork.scenarioApplicationInfo,
-                    oneOriginResult.paths
+                    oneOriginResult.paths,
+                    popularStops
             );
         }
         // Single-point tasks don't have a job ID. For now, we'll categorize them by scenario ID.
@@ -568,7 +571,7 @@ public class AnalysisWorker implements Runnable {
 
             // Perform the core travel time and accessibility computations.
             TravelTimeComputer computer = new TravelTimeComputer(task, transportNetwork);
-            OneOriginResult oneOriginResult = computer.computeTravelTimes();
+            OneOriginResult oneOriginResult = computer.computeTravelTimes().res;
 
             if (task.makeTauiSite) {
                 // Unlike a normal regional task, this will write a time grid rather than an accessibility indicator
@@ -644,6 +647,8 @@ public class AnalysisWorker implements Runnable {
 
         public List<PathResult.PathIterations> pathSummaries;
 
+        public List<String> popularStops;
+
         @Override
         public String toString () {
             return String.format(
@@ -674,6 +679,32 @@ public class AnalysisWorker implements Runnable {
         var jsonBlock = new GridJsonBlock();
         jsonBlock.scenarioApplicationInfo = scenarioApplicationInfo;
         jsonBlock.scenarioApplicationWarnings = scenarioApplicationWarnings;
+        if (accessibilityResult != null) {
+            // Due to the application of distance decay functions, we may want to make the shift to non-integer
+            // accessibility values (especially for cases where there are relatively few opportunities across the whole
+            // study area). But we'd need to control the number of decimal places serialized into the JSON.
+            jsonBlock.accessibility = accessibilityResult.getIntValues();
+        }
+        jsonBlock.pathSummaries = pathResult == null ? Collections.EMPTY_LIST : pathResult.getPathIterationsForDestination();
+        LOG.info("Travel time surface written, appending {}.", jsonBlock);
+        // We could do this when setting up the Spark handler, supplying writeValue as the response transformer
+        // But then you also have to handle the case where you are returning raw bytes.
+        JsonUtilities.objectMapper.writeValue(outputStream, jsonBlock);
+        LOG.info("Done writing");
+    }
+
+    public static void addJsonToGrid (
+        OutputStream outputStream,
+        AccessibilityResult accessibilityResult,
+        List<TaskError> scenarioApplicationWarnings,
+        List<TaskError> scenarioApplicationInfo,
+        PathResult pathResult,
+        List<String> popularStops
+    ) throws IOException {
+        var jsonBlock = new GridJsonBlock();
+        jsonBlock.scenarioApplicationInfo = scenarioApplicationInfo;
+        jsonBlock.scenarioApplicationWarnings = scenarioApplicationWarnings;
+        jsonBlock.popularStops = popularStops;
         if (accessibilityResult != null) {
             // Due to the application of distance decay functions, we may want to make the shift to non-integer
             // accessibility values (especially for cases where there are relatively few opportunities across the whole
