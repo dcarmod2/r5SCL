@@ -220,6 +220,7 @@ public class AnalysisRequest {
             Region region = Persistence.regions.findByIdIfPermitted(project.regionId, project.accessGroup);
             bounds = region.bounds;
         }
+        task.bounds = bounds;
 
         // TODO define class with static factory function WebMercatorGridBounds.fromLatLonBounds().
         //      Also include getIndex(x, y), getX(index), getY(index), totalTasks()

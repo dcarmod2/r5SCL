@@ -10,6 +10,7 @@ import com.conveyal.r5.analyst.WebMercatorGridPointSetCache;
 import com.conveyal.r5.analyst.WorkerCategory;
 import com.conveyal.r5.analyst.decay.DecayFunction;
 import com.conveyal.r5.profile.ProfileRequest;
+import com.conveyal.analysis.models.Bounds;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -61,6 +62,7 @@ public abstract class AnalysisWorkerTask extends ProfileRequest {
     public int north;
     public int width;
     public int height;
+    public Bounds bounds;
 
     /** The ID of the graph against which to calculate this task. */
     public String graphId;

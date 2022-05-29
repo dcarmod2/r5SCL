@@ -77,7 +77,7 @@ public class PerTargetPropagater {
     private final List<LinkedPointSet> linkedTargets;
 
     /** the profilerequest (used for walk speed etc.) */
-    public final ProfileRequest request;
+    public final AnalysisWorkerTask request;
 
     /** how travel times are summarized and written or streamed back to a client TODO inline that whole class here. */
     public TravelTimeReducer travelTimeReducer;
@@ -176,6 +176,7 @@ public class PerTargetPropagater {
         this.nonTransitTravelTimesToTargets = nonTransitTravelTimesToTargets;
         this.oneToOne = request instanceof RegionalTask && ((RegionalTask) request).oneToOne;
         this.transit = transit;
+        LOG.info("REQUEST: {} {} {} {}", request.bounds.north, request.bounds.south, request.bounds.east, request.bounds.west);
 
         // If we're making a static site we'll break travel times down into components and make paths.
         // This expects the pathsToStopsForIteration and pathWriter fields to be set separately by the caller.
@@ -330,41 +331,43 @@ public class PerTargetPropagater {
         timer.log();
         int maxVal = 0;
         int maxStop = 0;
-        for (int key: stopCounts.keys()) {
-            if (stopCounts.get(key) > maxVal) {
-                maxStop = key;
-                maxVal = stopCounts.get(key);
+        LOG.info("stopCounts: {} size {}", stopCounts, stopCounts.size());
+        LOG.info("bounds: within {} {} and {} {}?", request.bounds.south, request.bounds.west, request.bounds.north, request.bounds.east);
+        if (stopCounts.size() > 0) {
+            for (int key: stopCounts.keys()) {
+                if (stopCounts.get(key) > maxVal) {
+                    maxStop = key;
+                    maxVal = stopCounts.get(key);
+                }
+            }
+            LOG.info("MAX: {}, {} aka {}", maxStop, maxVal, this.transit.stopIdForIndex.get(maxStop)); 
+            findStopInfo(maxStop);
+
+            // TODO: find nearby stops by proximity
+            PriorityQueue<Map.Entry<Integer, Double>> indicies = new PriorityQueue(new Comparator() {
+                public int compare(Object a, Object b) {
+                    Map.Entry<Integer, Double> x = (Map.Entry<Integer, Double>)a;
+                    Map.Entry<Integer, Double> y = (Map.Entry<Integer, Double>)b;
+
+                    return x.getValue() - y.getValue() > 0 ? 1 : -1;
+                }
+            });
+            double lat = this.transit.stopLat.get(maxStop);
+            double lon = this.transit.stopLon.get(maxStop);
+            for (int i = 0; i < this.transit.stopLat.size(); i++) {
+                if (maxStop != i) {
+                    double distance = (lat - this.transit.stopLat.get(i)) * (lat - this.transit.stopLat.get(i)) + (lon - this.transit.stopLon.get(i)) * (lon - this.transit.stopLon.get(i));
+                    indicies.add(new AbstractMap.SimpleEntry(i, distance));
+                }
+            }
+
+            // LOG.info(Arrays.toString(this.transit.patternsForStop.toArray()));
+            // this.transit.rebuildTransientIndexes();
+            for (Iterator<Map.Entry<Integer, Double>> iterator = indicies.iterator(); iterator.hasNext() && removePopularStops.size() < 3;) {
+                Map.Entry<Integer, Double> thing = iterator.next();
+                findStopInfo(thing.getKey());
             }
         }
-        LOG.info("MAX: {}, {} aka {}", maxStop, maxVal, this.transit.stopIdForIndex.get(maxStop)); 
-        findStopInfo(maxStop);
-
-        // TODO: find nearby stops by proximity
-        PriorityQueue<Map.Entry<Integer, Double>> indicies = new PriorityQueue(new Comparator() {
-            public int compare(Object a, Object b) {
-                Map.Entry<Integer, Double> x = (Map.Entry<Integer, Double>)a;
-                Map.Entry<Integer, Double> y = (Map.Entry<Integer, Double>)b;
-
-                return x.getValue() - y.getValue() > 0 ? 1 : -1;
-            }
-        });
-        double lat = this.transit.stopLat.get(maxStop);
-        double lon = this.transit.stopLon.get(maxStop);
-        for (int i = 0; i < this.transit.stopLat.size(); i++) {
-            if (maxStop != i) {
-                double distance = (lat - this.transit.stopLat.get(i)) * (lat - this.transit.stopLat.get(i)) + (lon - this.transit.stopLon.get(i)) * (lon - this.transit.stopLon.get(i));
-                indicies.add(new AbstractMap.SimpleEntry(i, distance));
-            }
-        }
-
-        // LOG.info(Arrays.toString(this.transit.patternsForStop.toArray()));
-        // this.transit.rebuildTransientIndexes();
-
-        for (Iterator<Map.Entry<Integer, Double>> iterator = indicies.iterator(); iterator.hasNext() && removePopularStops.size() < 3;) {
-            Map.Entry<Integer, Double> thing = iterator.next();
-            findStopInfo(thing.getKey());
-        }
-
         if (savePaths == SavePaths.WRITE_TAUI && pathWriter != null) {
             pathWriter.finishAndStorePaths();
         }
@@ -496,7 +499,12 @@ public class PerTargetPropagater {
                                     for (int j = 0; j < patternSequence.patterns.size(); j++){
                                         TripPattern pattern = this.transit.tripPatterns.get(patternSequence.patterns.get(j));
                                         for (int k = 0; k < pattern.stops.length; k++){
-                                            stopCounts.adjustOrPutValue(pattern.stops[k], 1, 1);
+                                            double lat = transit.stopLat.get(pattern.stops[k]);
+                                            double lon = transit.stopLon.get(pattern.stops[k]);
+                                            if (lat <= request.bounds.north && lat >= request.bounds.south &&
+                                             lon <= request.bounds.east && lon >= request.bounds.west) {
+                                                stopCounts.adjustOrPutValue(pattern.stops[k], 1, 1);
+                                            }
                                         }
                                     }
                                     // perIterationPaths[iteration] = path;
