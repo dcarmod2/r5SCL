@@ -176,7 +176,6 @@ public class PerTargetPropagater {
         this.nonTransitTravelTimesToTargets = nonTransitTravelTimesToTargets;
         this.oneToOne = request instanceof RegionalTask && ((RegionalTask) request).oneToOne;
         this.transit = transit;
-        LOG.info("REQUEST: {} {} {} {}", request.bounds.north, request.bounds.south, request.bounds.east, request.bounds.west);
 
         // If we're making a static site we'll break travel times down into components and make paths.
         // This expects the pathsToStopsForIteration and pathWriter fields to be set separately by the caller.
@@ -354,17 +353,21 @@ public class PerTargetPropagater {
             });
             double lat = this.transit.stopLat.get(maxStop);
             double lon = this.transit.stopLon.get(maxStop);
-            LOG.info("NUM STOPS: {} {}", this.transit.stopIdForIndex.size(), this.transit.stopLat.size());
             for (int i = 0; i < this.transit.stopLat.size(); i++) {
                 if (maxStop != i) {
                     double distance = (lat - this.transit.stopLat.get(i)) * (lat - this.transit.stopLat.get(i)) + (lon - this.transit.stopLon.get(i)) * (lon - this.transit.stopLon.get(i));
-                    indicies.add(new AbstractMap.SimpleEntry(i, distance));
+                    if (distance < .0001) {
+                        indicies.add(new AbstractMap.SimpleEntry(i, distance));
+                    }
                 }
             }
 
             // LOG.info(Arrays.toString(this.transit.patternsForStop.toArray()));
             // this.transit.rebuildTransientIndexes();
-            while (removePopularStops.size() < 20) {
+            LOG.info("NUM STOPS: {}", indicies.size());
+
+            while (!indicies.isEmpty()){
+            // while (removePopularStops.size() < 10) {
                 Map.Entry<Integer, Double> thing = indicies.poll();
                 findStopInfo(thing.getKey());
             }
@@ -536,25 +539,8 @@ public class PerTargetPropagater {
                 tripIds.add("\""+arr[1]+"\"");
             }
         }
-        // for (TripPattern tripPattern: this.transit.tripPatterns){
-        //     boolean contains = false;
-        //     for (int x : tripPattern.stops) {
-        //         if (x == stopIndex){
-        //             contains = true;
-        //             break;
-        //         }
-        //     }
 
-        //     if (contains){
-        //         String[] routeArr = tripPattern.routeId.split(":");
-        //         routeIds.add("\""+routeArr[1]+"\"");
-        //         // for (TripSchedule tripSchedule : tripPattern.tripSchedules){
-        //         //     String[] arr = tripSchedule.tripId.split(":");
-        //         //     tripIds.add("\""+arr[1]+"\"");
-        //         // }
-        //     }
-        // }
-        String stopToRemove = "{\"name\": \""+stopIndex+"\",\"variants\": [true],\"description\": null,\"feed\": \"6268931e675f576555c61355\",\"routes\": "+Arrays.toString(routeIds.toArray())+",\"trips\": "+Arrays.toString(tripIds.toArray())+",\"stops\": [\""+stopArr[1]+"\"],\"secondsSavedAtEachStop\": 0}";
+        String stopToRemove = "{\"name\": \""+stopIndex+"\",\"variants\": [true],\"description\": null,\"feed\": \""+stopArr[0]+"\",\"routes\": "+Arrays.toString(routeIds.toArray())+",\"trips\": "+Arrays.toString(tripIds.toArray())+",\"stops\": [\""+stopArr[1]+"\"],\"secondsSavedAtEachStop\": 0}";
         if (routeIds.size() > 0) removePopularStops.add(stopToRemove);
     }
 
