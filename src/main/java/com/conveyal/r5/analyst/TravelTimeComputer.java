@@ -61,6 +61,7 @@ public class TravelTimeComputer {
      * on what's in the task it's given. TODO factor out each major step of this process into private methods.
      */
     public OneOriginResultWithStops computeTravelTimes() {
+        LOG.info("NUM STOPS: {} {}", this.network.transitLayer.stopIdForIndex.size(), this.network.transitLayer.stopLat.size());
 
         // 0. Preliminary range checking and setup =====================================================================
         if (!request.directModes.equals(request.accessModes)) {

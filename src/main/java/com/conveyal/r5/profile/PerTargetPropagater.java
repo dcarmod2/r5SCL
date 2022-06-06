@@ -331,8 +331,8 @@ public class PerTargetPropagater {
         timer.log();
         int maxVal = 0;
         int maxStop = 0;
-        LOG.info("stopCounts: {} size {}", stopCounts, stopCounts.size());
-        LOG.info("bounds: within {} {} and {} {}?", request.bounds.south, request.bounds.west, request.bounds.north, request.bounds.east);
+        // LOG.info("stopCounts: {} size {}", stopCounts, stopCounts.size());
+        // LOG.info("bounds: within {} {} and {} {}?", request.bounds.south, request.bounds.west, request.bounds.north, request.bounds.east);
         if (stopCounts.size() > 0) {
             for (int key: stopCounts.keys()) {
                 if (stopCounts.get(key) > maxVal) {
@@ -343,7 +343,7 @@ public class PerTargetPropagater {
             LOG.info("MAX: {}, {} aka {}", maxStop, maxVal, this.transit.stopIdForIndex.get(maxStop)); 
             findStopInfo(maxStop);
 
-            // TODO: find nearby stops by proximity
+            // find nearby stops by proximity
             PriorityQueue<Map.Entry<Integer, Double>> indicies = new PriorityQueue(new Comparator() {
                 public int compare(Object a, Object b) {
                     Map.Entry<Integer, Double> x = (Map.Entry<Integer, Double>)a;
@@ -354,6 +354,7 @@ public class PerTargetPropagater {
             });
             double lat = this.transit.stopLat.get(maxStop);
             double lon = this.transit.stopLon.get(maxStop);
+            LOG.info("NUM STOPS: {} {}", this.transit.stopIdForIndex.size(), this.transit.stopLat.size());
             for (int i = 0; i < this.transit.stopLat.size(); i++) {
                 if (maxStop != i) {
                     double distance = (lat - this.transit.stopLat.get(i)) * (lat - this.transit.stopLat.get(i)) + (lon - this.transit.stopLon.get(i)) * (lon - this.transit.stopLon.get(i));
@@ -363,8 +364,8 @@ public class PerTargetPropagater {
 
             // LOG.info(Arrays.toString(this.transit.patternsForStop.toArray()));
             // this.transit.rebuildTransientIndexes();
-            for (Iterator<Map.Entry<Integer, Double>> iterator = indicies.iterator(); iterator.hasNext() && removePopularStops.size() < 3;) {
-                Map.Entry<Integer, Double> thing = iterator.next();
+            while (removePopularStops.size() < 20) {
+                Map.Entry<Integer, Double> thing = indicies.poll();
                 findStopInfo(thing.getKey());
             }
         }
